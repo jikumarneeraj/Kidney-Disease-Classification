@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vision · Object Classification</title>
+<link rel="shortcut icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAIq0lEQVRYw6WWa3BV1RXH/2vv88zNi5AHgTyIISSIEAgPeUwUrFDFx9hqx9F2dDp2dGy105m2fFG/tLXtdPqYym0dWkularjB6dhss3q5vmBJFy7wwLg9jrhkaSb3+3n/ub97zzmXCEwlYW0KIcIsA3ee3Xb6RWnpxr+3pmSAB9C+/wLewCH1w/AAAAABJRU5ErkJggg==" />
+<style>
+:root{
+  --bg:#11141c;
+  --panel:#171b26;
+  --panel-2:#1d2231;
+  --line:#2a3042;
+  --amber:#e8935a;
+  --amber-dim:#7a5842;
+  --teal:#4fd1c5;
+  --text:#e7eaf3;
+  --muted:#8b92a8;
+  --mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(232,147,90,0.08), transparent 60%),
+    radial-gradient(900px 500px at 100% 10%, rgba(79,209,197,0.06), transparent 55%),
+    var(--bg);
+  color:var(--text);
+  font-family:'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+}
+@font-face{font-family:'Inter';src:local('Inter');}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 24px 32px;width:100%;flex:1;}
+
+header.top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:40px;flex-wrap:wrap;gap:12px;}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber);}
+h1{
+  font-family:'Space Grotesk', 'Inter', sans-serif;
+  font-size:clamp(28px,4vw,42px);
+  margin:6px 0 0;
+  font-weight:600;
+  letter-spacing:-0.01em;
+}
+.tagline{color:var(--muted);font-size:14px;max-width:420px;text-align:right;}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;}
+@media(max-width:860px){.grid{grid-template-columns:1fr;}}
+
+/* Viewfinder */
+.viewfinder{
+  position:relative;
+  aspect-ratio:1/1;
+  background:#05070c;
+  border-radius:4px;
+  overflow:hidden;
+  border:1px solid var(--line);
+}
+.viewfinder video,.viewfinder img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;
+}
+.viewfinder video{display:block;}
+.viewfinder img.show{display:block;}
+
+.bracket{position:absolute;width:34px;height:34px;border-color:var(--amber);opacity:.9;transition:all .35s ease;z-index:3;pointer-events:none;}
+.bracket.tl{top:14px;left:14px;border-top:2px solid var(--amber);border-left:2px solid var(--amber);}
+.bracket.tr{top:14px;right:14px;border-top:2px solid var(--amber);border-right:2px solid var(--amber);}
+.bracket.bl{bottom:14px;left:14px;border-bottom:2px solid var(--amber);border-left:2px solid var(--amber);}
+.bracket.br{bottom:14px;right:14px;border-bottom:2px solid var(--amber);border-right:2px solid var(--amber);}
+.viewfinder.focusing .bracket{width:20px;height:20px;border-color:var(--teal);}
+.viewfinder.focusing .bracket.tl{top:24px;left:24px;}
+.viewfinder.focusing .bracket.tr{top:24px;right:24px;}
+.viewfinder.focusing .bracket.bl{bottom:24px;left:24px;}
+.viewfinder.focusing .bracket.br{bottom:24px;right:24px;}
+
+.scanline{
+  position:absolute;left:0;right:0;height:2px;
+  background:linear-gradient(90deg, transparent, var(--teal), transparent);
+  box-shadow:0 0 14px 2px rgba(79,209,197,0.6);
+  top:-5%;
+  z-index:2;
+  display:none;
+}
+.viewfinder.scanning .scanline{display:block;animation:sweep 1.4s linear infinite;}
+@keyframes sweep{
+  0%{top:-2%;}
+  100%{top:100%;}
+}
+
+.readout{
+  position:absolute;bottom:0;left:0;right:0;
+  font-family:var(--mono);font-size:10px;color:var(--muted);
+  padding:8px 12px;background:linear-gradient(transparent,rgba(0,0,0,0.65));
+  display:flex;justify-content:space-between;z-index:3;
+  letter-spacing:.05em;
+}
+
+.controls{display:flex;gap:10px;margin-top:16px;}
+button{
+  font-family:'Inter',sans-serif;
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:.02em;
+  padding:12px 20px;
+  border-radius:3px;
+  border:1px solid var(--line);
+  background:var(--panel-2);
+  color:var(--text);
+  cursor:pointer;
+  transition:border-color .2s ease, transform .1s ease;
+  flex:1;
+}
+button:hover{border-color:var(--amber);}
+button:active{transform:translateY(1px);}
+button.primary{
+  background:var(--amber);
+  color:#1a1206;
+  border-color:var(--amber);
+}
+button.primary:hover{background:#f0a672;}
+button.danger{
+  background:transparent;
+  border-color:var(--amber-dim);
+  color:var(--amber);
+}
+button.danger:hover{border-color:var(--amber);background:rgba(232,147,90,0.08);}
+button:disabled{opacity:.5;cursor:not-allowed;}
+button:disabled:hover{border-color:var(--line);background:var(--panel-2);}
+button:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+input[type=file]{display:none;}
+
+.retrain-note{
+  margin-top:10px;
+  font-family:var(--mono);
+  font-size:11.5px;
+  line-height:1.6;
+  color:var(--muted);
+  border-left:2px solid var(--amber-dim);
+  padding:8px 10px;
+  background:rgba(232,147,90,0.04);
+}
+.retrain-note code{color:var(--amber);}
+.retrain-note.active{color:var(--teal);border-left-color:var(--teal);background:rgba(79,209,197,0.05);}
+
+/* Results panel */
+.panel{
+  border:1px solid var(--line);
+  border-radius:4px;
+  background:var(--panel);
+  display:flex;
+  flex-direction:column;
+  height:100%;
+}
+.panel-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block;margin-right:6px;}
+.dot.live{background:var(--teal);box-shadow:0 0 6px var(--teal);}
+
+.panel-body{padding:16px;flex:1;display:flex;flex-direction:column;gap:14px;overflow:auto;min-height:260px;}
+.result-thumb{width:120px;border-radius:3px;border:1px solid var(--line);align-self:flex-start;}
+.json-out{
+  font-family:var(--mono);
+  font-size:12.5px;
+  line-height:1.6;
+  color:#c8e8e2;
+  white-space:pre-wrap;
+  word-break:break-word;
+  margin:0;
+  flex:1;
+}
+.placeholder{color:var(--muted);font-family:var(--mono);font-size:12.5px;}
+.placeholder .cursor{display:inline-block;width:7px;height:14px;background:var(--amber);vertical-align:middle;margin-left:2px;animation:blink 1s step-end infinite;}
+@keyframes blink{50%{opacity:0;}}
+
+footer{
+  text-align:center;
+  padding:22px 12px;
+  font-family:var(--mono);
+  font-size:12px;
+  color:var(--muted);
+  border-top:1px solid var(--line);
+}
+footer span{color:var(--amber);}
+
+#loading{
+  position:fixed;inset:0;z-index:999;
+  background:rgba(9,11,16,0.55);
+  display:none;
+  align-items:center;justify-content:center;
+  backdrop-filter:blur(2px);
+}
+#loading .spin{
+  width:46px;height:46px;border-radius:50%;
+  border:3px solid var(--line);border-top-color:var(--amber);
+  animation:rot 0.9s linear infinite;
+}
+@keyframes rot{to{transform:rotate(360deg);}}
+
+@media (prefers-reduced-motion: reduce){
+  .scanline{animation:none !important;}
+  #loading .spin{animation:none !important;}
+  .placeholder .cursor{animation:none !important;}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Neural Classifier · v1</div>
+      <h1>Object Classification</h1>
+    </div>
+    <div class="tagline">Point the lens, capture a frame, and let the model read what it sees.</div>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="viewfinder" id="viewfinder">
+        <video autoplay id="video" poster="https://cdn.britannica.com/36/152936-050-92C2B3BD/Magnetic-resonance-imaging-types-abnormalities.jpg"></video>
+        <img src="" id="photo">
+        <canvas style="display:none;" id="canvas"></canvas>
+        <div class="bracket tl"></div>
+        <div class="bracket tr"></div>
+        <div class="bracket bl"></div>
+        <div class="bracket br"></div>
+        <div class="scanline"></div>
+        <div class="readout"><span id="readout-status">STANDBY</span><span id="readout-dim">—</span></div>
+      </div>
+      <div class="controls">
+        <button type="button" id="uload">Upload image</button>
+        <button type="button" class="primary" id="send">Classify</button>
+      </div>
+      <div class="controls" style="margin-top:10px;">
+        <button type="button" class="danger" id="retrain">Retrain model</button>
+      </div>
+      <div class="retrain-note" id="retrainNote">
+        ⚠ Retraining hits <code>/train</code> and can take <strong>5–10 minutes</strong>. The page will stay open and update once it's done — no need to refresh.
+      </div>
+      <input name="upload" type="file" id="fileinput" accept="image/*"/>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span><span class="dot" id="statusDot"></span>Prediction output</span>
+        <span id="panel-time">idle</span>
+      </div>
+      <div class="panel-body" id="panelBody">
+        <div class="placeholder">Awaiting input<span class="cursor"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Made by <span>Neeraj Kumar</span></footer>
+
+<div id="loading"><div class="spin"></div></div>
+
+<input type="hidden" id="url" value="../predict"/>
+
+<script>
+var base_data = "";
+var viewfinder = document.getElementById('viewfinder');
+var readoutStatus = document.getElementById('readout-status');
+var readoutDim = document.getElementById('readout-dim');
+var panelBody = document.getElementById('panelBody');
+var panelTime = document.getElementById('panel-time');
+var statusDot = document.getElementById('statusDot');
+var loading = document.getElementById('loading');
+
+function setPlaceholder(text){
+  panelBody.innerHTML = '<div class="placeholder">' + text + '<span class="cursor"></span></div>';
+}
+
+function sendRequest(base64Data){
+  if(!base64Data){
+    setPlaceholder('No image captured yet');
+    return;
+  }
+  var url = document.getElementById('url').value;
+  loading.style.display = 'flex';
+  viewfinder.classList.add('scanning');
+  readoutStatus.textContent = 'ANALYZING';
+  statusDot.classList.remove('live');
+
+  fetch(url, {
+    method: 'POST',
+    mode: 'cors',
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    },
+    body: JSON.stringify({ image: base64Data })
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(res){
+    panelBody.innerHTML = '';
+
+    try{
+      var imageData = res[1] && res[1].image;
+      if(imageData && imageData.length > 100){
+        var img = document.createElement('img');
+        img.className = 'result-thumb';
+        img.src = 'data:image/jpeg;base64,' + imageData;
+        panelBody.appendChild(img);
+      }
+    }catch(e){}
+
+    var pre = document.createElement('pre');
+    pre.className = 'json-out';
+    pre.textContent = JSON.stringify(res[0], undefined, 2);
+    panelBody.appendChild(pre);
+
+    readoutStatus.textContent = 'MATCH FOUND';
+    statusDot.classList.add('live');
+    panelTime.textContent = new Date().toLocaleTimeString();
+  })
+  .catch(function(err){
+    setPlaceholder('Request failed — check the API endpoint');
+    readoutStatus.textContent = 'ERROR';
+  })
+  .finally(function(){
+    loading.style.display = 'none';
+    viewfinder.classList.remove('scanning');
+    viewfinder.classList.add('focusing');
+    setTimeout(function(){ viewfinder.classList.remove('focusing'); }, 500);
+  });
+}
+
+document.getElementById('send').addEventListener('click', function(){
+  sendRequest(base_data);
+});
+
+var retrainBtn = document.getElementById('retrain');
+var retrainNote = document.getElementById('retrainNote');
+var retrainDefaultNote = retrainNote.innerHTML;
+var retrainTimer = null;
+var retrainSeconds = 0;
+
+retrainBtn.addEventListener('click', function(){
+  var confirmed = confirm('Retraining can take 5–10 minutes and the model will be unavailable for predictions until it finishes. Continue?');
+  if(!confirmed) return;
+
+  if(window.Notification && Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+
+  retrainBtn.disabled = true;
+  document.getElementById('send').disabled = true;
+  retrainNote.classList.add('active');
+  retrainSeconds = 0;
+  readoutStatus.textContent = 'RETRAINING';
+  statusDot.classList.remove('live');
+
+  retrainTimer = setInterval(function(){
+    retrainSeconds++;
+    var m = Math.floor(retrainSeconds / 60);
+    var s = retrainSeconds % 60;
+    retrainNote.innerHTML = '⏳ Retraining in progress — elapsed ' + m + 'm ' + (s < 10 ? '0' : '') + s + 's. This can take 5–10 minutes, please keep this tab open.';
+  }, 1000);
+
+  fetch('/train', {
+    method: 'POST',
+    mode: 'cors',
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    }
+  })
+  .then(function(res){ return res.text(); })
+  .then(function(text){
+    var message = text && text.trim() ? text.trim() : 'The model has been updated.';
+    retrainNote.innerHTML = '✅ ' + message;
+    readoutStatus.textContent = 'READY';
+    notifyUser('Retraining complete', message);
+  })
+  .catch(function(err){
+    retrainNote.innerHTML = '⚠ Retraining request failed — check the <code>/train</code> endpoint and try again.';
+    readoutStatus.textContent = 'ERROR';
+    notifyUser('Retraining failed', 'Check the /train endpoint and try again.');
+  })
+  .finally(function(){
+    clearInterval(retrainTimer);
+    retrainBtn.disabled = false;
+    document.getElementById('send').disabled = false;
+    retrainNote.classList.remove('active');
+  });
+});
+
+function notifyUser(title, body){
+  if(window.Notification && Notification.permission === 'granted'){
+    try{ new Notification(title, { body: body }); }catch(e){}
+  }
+  var original = document.title;
+  document.title = '✅ ' + title;
+  setTimeout(function(){ document.title = original; }, 6000);
+}
+
+document.getElementById('uload').addEventListener('click', function(){
+  document.getElementById('fileinput').click();
+});
+
+document.getElementById('fileinput').addEventListener('change', function(){
+  if(this.files && this.files[0]){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var url = e.target.result;
+      var img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = function(){
+        var canvas = document.createElement('CANVAS');
+        var ctx = canvas.getContext('2d');
+        canvas.height = this.height;
+        canvas.width = this.width;
+        ctx.drawImage(this, 0, 0);
+        base_data = canvas.toDataURL('image/jpeg', 1.0).replace(/^data:image.+;base64,/, '');
+        readoutDim.textContent = this.width + '×' + this.height;
+        canvas = null;
+      };
+      img.src = url;
+      var photo = document.getElementById('photo');
+      photo.src = url;
+      photo.classList.add('show');
+      document.getElementById('video').style.display = 'none';
+      readoutStatus.textContent = 'FRAME LOADED';
+      setPlaceholder('Ready to classify');
+    };
+    reader.readAsDataURL(this.files[0]);
+  }
+});
+</script>
+</body>
+</html>
